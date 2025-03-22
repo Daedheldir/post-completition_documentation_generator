@@ -5,10 +5,25 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Principal;
 using System.Threading;
+using Tommy;
 
+
+//TODO: Page counting is off 
 namespace PDF_Merger
 {
+    internal class PDFMergerConfig
+    {
+        public string inputFilepath = "";
+        public string outputFilepath = "";
+        public string titleFilepath = "";
+        public string tableOfContentsFilepath = "";
+        public string declarationFilepath = "";
+        public string fullInputFilepath = "";
+        public bool multipleDeclarationPages = false;
+        public bool continousNumeration = false;
+    }
     internal class PDF_Merger
     {
         public static List<Tuple<string, PdfCustomDoc>> createDocumentList(string targetPath, List<Tuple<string, string, List<string>>> directoryFileList, string declarationPath = "0", string tableOfContentsPath = "0", string titlePagePath = "0", bool multipleDeclarationPages = true)
@@ -70,7 +85,7 @@ namespace PDF_Merger
             }
             try { 
             targetDoc.Save(targetPath + "\\merged.pdf");
-                }catch(System.IO.DirectoryNotFoundException e)
+                }catch(DirectoryNotFoundException e)
             {
                 Console.WriteLine("Directory " + targetPath + "\\merged.pdf couldn't be found!\\" + e.Message + "\\\\ PRESS ANY KEY TO CONTINUE...");
                 Console.ReadLine();
@@ -127,30 +142,43 @@ namespace PDF_Merger
                     pageCount += currentDocument.PageCount;
                     tempDoc = currentDocument;
 
+                    // Make a font and a brush to draw the page counter.
+                    XFont font = new XFont("Arial", 8, XFontStyle.Bold);
+                    XBrush brush = XBrushes.Black;
+
                     //add pages from current doc to target doc
                     for (int i = 0; i < currentDocument.PageCount; i++)
                     {
                         try
                         {
-                            // Make a font and a brush to draw the page counter.
-                            XFont font = new XFont("Arial", 8, XFontStyle.Bold);
-                            XBrush brush = XBrushes.Black;
-
                             // Add the page counter.
                             PdfPage page = currentDocument.Pages[i];
+                            bool pageRotated = false;
+                            if(page.Width > page.Height)
+                            {
+                                page.Rotate = 90;
+                                pageRotated = true;
+                            }
                             targetDoc.AddPage(page);
 
                             // Make a layout rectangle.
                             XRect layoutRectangle = new XRect(0/*X*/, page.Height - 1.5 * font.Height/*Y*/, page.Width - font.Height/*Width*/, font.Height/*Height*/);
 
+
                             using (XGraphics gfx = XGraphics.FromPdfPage(targetDoc.Pages[targetDoc.Pages.Count - 1]))
                             {
+                                if (pageRotated)
+                                {
+                                    layoutRectangle = new XRect(0/*X*/, 0/*Y*/, page.Width - font.Height/*Width*/, font.Height/*Height*/);
+                                    gfx.RotateAtTransform(-90, layoutRectangle.BottomRight);
+                                }
                                 gfx.DrawString(
                                     (++currentTotalPageCount).ToString() + " strona dokumentacji.",
                                     font,
                                     brush,
                                     layoutRectangle,
                                     XStringFormats.CenterRight);
+                                //gfx.DrawRectangle(brush, layoutRectangle);
                             }
 
                             //add declaration after first page
@@ -172,6 +200,15 @@ namespace PDF_Merger
             {
                 StreamWriter writer = new StreamWriter(targetPath + "\\log.txt");
                 writer.Write("Error when opening " + file + "\n" + e.Message);
+                writer.Close();
+                Console.WriteLine("Error when opening " + file + "\n" + e.Message);
+            }
+            catch (Exception e)
+            {
+                StreamWriter writer = new StreamWriter(targetPath + "\\log.txt");
+                writer.Write("Error when opening " + file + "\n" + e.Message);
+                writer.Close();
+                Console.WriteLine("Error when opening " + file + "\n" + e.Message);
             }
         }
 
@@ -294,73 +331,121 @@ namespace PDF_Merger
 
         private static void Main(string[] args)
         {
-            Console.WriteLine("Remember to change directories in input.txt!");
+            PDFMergerConfig config = new PDFMergerConfig();
+            string selection = "";
+            do
+            {
+                Console.WriteLine("Read from config [0] or manually input configuration[1]?");
+                selection = Console.ReadLine();
 
-            string outputFilepath, inputFilepath;
+            } while (selection != "0" && selection != "1");
+
+            if (selection == "0")
+            {
+                string configPath = "";
+                do {
+                    Console.WriteLine("Input config path:");
+                    configPath = Console.ReadLine();
+                }
+                while (!configPath.Contains(".toml"));
+                config = readConfig(configPath);
+            }
+            else
+            {
+                config = readConfig();
+            }
+
+            if (config is null) return;
+
+            //create list of documents
+            List<Tuple<string, string, List<string>>> filePaths = loadFilePaths(config.fullInputFilepath);
+            List<Tuple<string, PdfCustomDoc>> docList = createDocumentList(config.outputFilepath, filePaths, config.declarationFilepath, config.tableOfContentsFilepath, config.titleFilepath, config.multipleDeclarationPages);
+
+            //create merged document
+            savePageNumbers(docList, config.outputFilepath);
+            savePageEnumeration(docList, config.outputFilepath, config.continousNumeration);
+            saveDocumentNames(docList, config.outputFilepath);
+
+            //mergedDoc.Save(outputFilepath + "\\mergedDoc.pdf");
+            Console.WriteLine("Finished...");
+            Thread.Sleep(10000);
+        }
+        private static PDFMergerConfig readConfig(string configFilepath) { 
+            var config = new PDFMergerConfig();
+            using(StreamReader reader = File.OpenText(configFilepath))
+            {
+                TomlTable table = TOML.Parse(reader);
+                config.inputFilepath = table["input_filepath"].AsString;
+                config.inputFilepath = config.inputFilepath.Replace("\\", "/");
+                config.outputFilepath = table["output_filepath"].AsString;
+                config.outputFilepath = config.outputFilepath.Replace("\\", "/");
+                config.titleFilepath = table["title_filepath"].AsString;
+                config.titleFilepath = config.titleFilepath.Replace("\\", "/");
+                config.declarationFilepath = table["declaration_filepath"].AsString;
+                config.declarationFilepath = config.declarationFilepath.Replace("\\", "/");
+                config.tableOfContentsFilepath = table["table_of_contents_filepath"].AsString;
+                config.tableOfContentsFilepath = config.tableOfContentsFilepath.Replace("\\", "/");
+
+                config.multipleDeclarationPages = table["multiple_declaration_pages"].AsInteger == 1;
+                config.continousNumeration = table["continous_numeration"].AsInteger == 1;
+                config.fullInputFilepath = config.inputFilepath;
+            }
+            return config;
+        }
+        private static PDFMergerConfig readConfig()
+        {
+            var config = new PDFMergerConfig();
 
             do
             {
-                Console.WriteLine("Input filepath or \"0\" if read from file: ");
-                inputFilepath = Console.ReadLine().Replace("\\", "/");
+                Console.WriteLine("Input filepath: ");
+                config.inputFilepath = Console.ReadLine().Replace("\\", "/");
 
                 Console.WriteLine("Output filepath: ");
-                outputFilepath = Console.ReadLine().Replace("\\", "/");
+                config.outputFilepath = Console.ReadLine().Replace("\\", "/");
 
-                if (outputFilepath.Contains('.') || inputFilepath.Contains('.'))
+
+                if (config.outputFilepath.Contains('.') || config.inputFilepath.Contains('.'))
                 {
                     Console.WriteLine("Filepath can't contain file in it!\n");
                 }
-            } while (outputFilepath.Contains('.') || inputFilepath.Contains('.'));
+            } while (config.outputFilepath.Contains('.') || config.inputFilepath.Contains('.'));
             Console.WriteLine("Title page filepath or \"0\" if there is none: ");
-            string titleFilepath = Console.ReadLine().Replace("\\", "/");
+            config.titleFilepath = Console.ReadLine().Replace("\\", "/");
 
             Console.WriteLine("Table of Contents filepath or \"0\" if there is none: ");
-            string tableOfContentsFilepath = Console.ReadLine().Replace("\\", "/");
+            config.tableOfContentsFilepath = Console.ReadLine().Replace("\\", "/");
 
             Console.WriteLine("Declaration filepath or \"0\" if there is none: ");
-            string declarationFilepath = Console.ReadLine().Replace("\\", "/");
-            bool multipleDeclarationPages = false;
+            config.declarationFilepath = Console.ReadLine().Replace("\\", "/");
 
-            if (declarationFilepath != "0")
+            if (config.declarationFilepath != "0")
             {
                 Console.WriteLine("Declaration page after each document page [1] or anything if declaration page only after first page: ");
-                multipleDeclarationPages = Console.ReadLine() == "1";
+                config.multipleDeclarationPages = Console.ReadLine() == "1";
             }
 
             Console.WriteLine("Continue numeration between sections [1] or start from 1 for each new section [0]: ");
-            bool continousNumeration = Console.ReadLine() == "1";
+            config.continousNumeration = Console.ReadLine() == "1";
 
-            string fullInputFilepath = (inputFilepath == "0" ? Directory.GetCurrentDirectory() + "/input.txt" : inputFilepath);
+            config.fullInputFilepath = (config.inputFilepath == "0" ? Directory.GetCurrentDirectory() + "/input.txt" : config.inputFilepath);
 
-            if (inputFilepath == "0")
+            if (config.inputFilepath == "0")
             {
                 try
                 {
-                    StreamReader testReader = new StreamReader(fullInputFilepath);
+                    StreamReader testReader = new StreamReader(config.fullInputFilepath);
                     testReader.Close();
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine(e);
                     Thread.Sleep(10000);
-                    return;
+                    return null;
                 }
             }
-
-            //create list of documents
-            List<Tuple<string, string, List<string>>> filePaths = loadFilePaths(fullInputFilepath);
-            List<Tuple<string, PdfCustomDoc>> docList = createDocumentList(outputFilepath, filePaths, declarationFilepath, tableOfContentsFilepath, titleFilepath, multipleDeclarationPages);
-
-            //create merged document
-            savePageNumbers(docList, outputFilepath);
-            savePageEnumeration(docList, outputFilepath, continousNumeration);
-            saveDocumentNames(docList, outputFilepath);
-
-            //mergedDoc.Save(outputFilepath + "\\mergedDoc.pdf");
-            Console.WriteLine("Finished...");
-            Thread.Sleep(10000);
+            return config;
         }
-
         private static void saveDocumentNames(List<Tuple<string, PdfCustomDoc>> docList, string outputPath)
         {
             StreamWriter writer = new StreamWriter(outputPath + "\\docNames.txt");
@@ -393,7 +478,7 @@ namespace PDF_Merger
             {
                 if (currentDir != tuple.Item1)
                 {
-                    if (continousNumeration)
+                    if (!continousNumeration)
                         pageCount = 1;
 
                     currentDir = tuple.Item1;
