@@ -10,7 +10,6 @@ using System.Threading;
 using Tommy;
 
 
-//TODO: Page counting is off 
 namespace PDF_Merger
 {
     internal class SubdirParams
@@ -40,7 +39,7 @@ namespace PDF_Merger
 
     internal class PDF_Merger
     {
-        public static List<Tuple<string, PdfCustomDoc>> createDocumentList(PDFMergerConfig config, List<Tuple<SubdirParams, string, string, List<string>>> directoryFileList)
+        public static List<Tuple<string, PdfCustomDoc>> createDocumentList(PDFMergerConfig config, List<Tuple<SubdirParams, string, List<string>>> directoryFileList)
         {
             List<Tuple<string, PdfCustomDoc>> pagesDocumentList = new List<Tuple<string, PdfCustomDoc>>();   //list<directort<pageCount, document>>
             PdfDocument targetDoc = new PdfDocument();
@@ -57,24 +56,19 @@ namespace PDF_Merger
 
             int currentTotalPageCount = 0;
 
-            foreach (Tuple<SubdirParams, string, string, List<string>> tuple in directoryFileList)
+            foreach (Tuple<SubdirParams, string, List<string>> tuple in directoryFileList)
             {
                 //add pages for each file in list
-                foreach (string file in tuple.Item4)
+                foreach (string file in tuple.Item3)
                 {
                     int pageCount = 0;
 
                     //if file is a pdf
                     if (file.Contains(".pdf"))
-                    {
                         AddPdfPage(config.fullInputFilepath, config.declarationFilepath, tuple.Item1, targetDoc, declarationDoc, ref tempDoc, file, ref pageCount, ref currentTotalPageCount);
-                    }
-
                     //if file isnt a pdf convert it
                     else if (file.Contains(".jpg") || file.Contains(".jpeg") || file.Contains(".png"))
-                    {
                         tempDoc = AddImagePage(config.declarationFilepath, targetDoc, declarationDoc, file, ref pageCount);
-                    }
 
                     //if page count is not even add a declaration page
                     if ((targetDoc.PageCount % 2) != 0)
@@ -88,13 +82,12 @@ namespace PDF_Merger
                     string[] name = file.Split('\\');
                     string file_path = "";
                     for (int i = 0; i < name.Length - 1; ++i)
-                    {
                         file_path += '/' + name[i];
-                    }
+
                     int actualPageCount = (((pageCount / 2) >= 1) ? (pageCount / 2) : (pageCount));
 
                     //add new pair of directory , file
-                    pagesDocumentList.Add(new Tuple<string, PdfCustomDoc>(tuple.Item2, new PdfCustomDoc(tempDoc, name[name.Length - 1].Split('.')[0], file_path, actualPageCount)));
+                    pagesDocumentList.Add(new Tuple<string, PdfCustomDoc>(tuple.Item1.path, new PdfCustomDoc(tempDoc, name[name.Length - 1].Split('.')[0], file_path, actualPageCount)));
                 }
             }
             try
@@ -251,29 +244,7 @@ namespace PDF_Merger
         private static List<Tuple<string, string, List<string>>> loadFilePaths(string path)
         {
             List<Tuple<string, string, List<string>>> directoryFileList = new List<Tuple<string, string, List<string>>>();
-            List<string> directories = new List<string>();
-
-            if (path.Contains(".txt"))
-            {
-                StreamReader reader = new StreamReader(path);
-                try
-                {
-                    do
-                        directories.Add(reader.ReadLine());
-                    while (reader.Peek() != -1);
-                }
-                catch
-                {
-                    Console.WriteLine("File is empty!!!");
-                    Thread.Sleep(10000);
-                }
-                finally
-                {
-                    reader.Close();
-                }
-            }
-            else
-                directories.Add(path);
+            List<string> directories = new List<string>{path};
 
             //add subdirs to table;
             foreach (string dir in directories)
@@ -292,24 +263,24 @@ namespace PDF_Merger
             }
             return directoryFileList;
         }
-        private static List<Tuple<SubdirParams, string, string, List<string>>> loadFilePaths(PDFMergerConfig config)
+        private static List<Tuple<SubdirParams, string, List<string>>> loadFilePaths(PDFMergerConfig config)
         {
-            List<Tuple<SubdirParams, string, string, List<string>>> directoryFileList = new List<Tuple<SubdirParams, string, string, List<string>>>();
+            List<Tuple<SubdirParams, string, List<string>>> directoryFileList = new List<Tuple<SubdirParams, string, List<string>>>();
 
             //add subdirs to table;
             foreach (var subdirParams in config.subdirectories)
             {
                 List<string> subDirs = loadSubDirectories(Path.Combine(config.fullInputFilepath, subdirParams.path), 0);
                 foreach (string subDir in subDirs)
-                    directoryFileList.Add(new Tuple<SubdirParams, string, string, List<string>>(subdirParams, subdirParams.path, subDir, new List<string>()));
+                    directoryFileList.Add(new Tuple<SubdirParams, string, List<string>>(subdirParams, subDir, new List<string>()));
             }
             //Add files to filelist
-            foreach (Tuple<SubdirParams, string, string, List<string>> tuple in directoryFileList)
+            foreach (Tuple<SubdirParams, string, List<string>> tuple in directoryFileList)
             {
-                string[] paths = Directory.GetFiles(tuple.Item3);
+                string[] paths = Directory.GetFiles(tuple.Item2);
 
                 foreach (string p in paths)
-                    tuple.Item4.Add(p);
+                    tuple.Item3.Add(p);
             }
             return directoryFileList;
         }
@@ -355,7 +326,7 @@ namespace PDF_Merger
             if (config is null) return;
 
             //create list of documents
-            List<Tuple<SubdirParams, string, string, List<string>>> filePaths = loadFilePaths(config);
+            List<Tuple<SubdirParams, string, List<string>>> filePaths = loadFilePaths(config);
             List<Tuple<string, PdfCustomDoc>> docList = createDocumentList(config, filePaths);
 
             //create merged document
