@@ -89,7 +89,9 @@ namespace PDF_Merger
                 }
             }
             try
+            {
                 targetDoc.Save(config.outputFilepath + "\\merged.pdf");
+            }
             catch (DirectoryNotFoundException e)
             {
                 Console.WriteLine("Directory " + config.outputFilepath + "\\merged.pdf couldn't be found!\\" + e.Message + "\\\\ PRESS ANY KEY TO CONTINUE...");
