@@ -50,9 +50,7 @@ namespace PDF_Merger
             AddDocumentPages(config.tableOfContentsFilepath, targetDoc);
 
             if (config.declarationFilepath != "0")
-            {
                 declarationDoc = PdfReader.Open(config.declarationFilepath, PdfDocumentOpenMode.Import);
-            }
 
             int currentTotalPageCount = 0;
 
@@ -91,9 +89,7 @@ namespace PDF_Merger
                 }
             }
             try
-            {
                 targetDoc.Save(config.outputFilepath + "\\merged.pdf");
-            }
             catch (DirectoryNotFoundException e)
             {
                 Console.WriteLine("Directory " + config.outputFilepath + "\\merged.pdf couldn't be found!\\" + e.Message + "\\\\ PRESS ANY KEY TO CONTINUE...");
@@ -240,29 +236,6 @@ namespace PDF_Merger
             }
         }
 
-        //<Directory_name,  < Subdir_name , Files >>
-        private static List<Tuple<string, string, List<string>>> loadFilePaths(string path)
-        {
-            List<Tuple<string, string, List<string>>> directoryFileList = new List<Tuple<string, string, List<string>>>();
-            List<string> directories = new List<string>{path};
-
-            //add subdirs to table;
-            foreach (string dir in directories)
-            {
-                List<string> subDirs = loadSubDirectories(dir, 0);
-                foreach (string subDir in subDirs)
-                    directoryFileList.Add(new Tuple<string, string, List<string>>(dir, subDir, new List<string>()));
-            }
-
-            foreach (Tuple<string, string, List<string>> triple in directoryFileList)
-            {
-                string[] paths = Directory.GetFiles(triple.Item2);
-
-                foreach (string p in paths)
-                    triple.Item3.Add(p);
-            }
-            return directoryFileList;
-        }
         private static List<Tuple<SubdirParams, string, List<string>>> loadFilePaths(PDFMergerConfig config)
         {
             List<Tuple<SubdirParams, string, List<string>>> directoryFileList = new List<Tuple<SubdirParams, string, List<string>>>();
@@ -290,10 +263,8 @@ namespace PDF_Merger
             List<string> output = new List<string>();
             string[] dirTable = Directory.GetDirectories(currentPath);
             if (dirTable.Length <= 0 || searchDepth > 5)
-            {
                 //if there are no subdirectories add to table
                 output.Add(currentPath);
-            }
             else
             {
                 //if there are subdirs
@@ -373,7 +344,7 @@ namespace PDF_Merger
                 if (currentDir != tuple.Item1)
                 {
                     currentDir = tuple.Item1;
-                    writer.WriteLine(currentDir);
+                    writer.WriteLine("----[" + currentDir + "]----");
                 }
 
                 writer.WriteLine(tuple.Item2.Name);
