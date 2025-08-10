@@ -292,6 +292,9 @@ namespace PDF_Merger
             {
                 Console.WriteLine("Input config path:");
                 configPath = Console.ReadLine();
+                if (!configPath.Contains(".toml")) {
+                    Console.WriteLine("Path \"{0}\" does not point to a .toml config file!", configPath);
+                }
             }
             while (!configPath.Contains(".toml"));
             config = readConfig(configPath);
@@ -311,20 +314,22 @@ namespace PDF_Merger
             Console.WriteLine("Finished...");
             Thread.Sleep(10000);
         }
-        private static PDFMergerConfig readConfig(string configFilepath) { 
+        private static PDFMergerConfig readConfig(string configFilepath) {
+            string configRoot = Path.GetDirectoryName(configFilepath);
+
             var config = new PDFMergerConfig();
             using(StreamReader reader = File.OpenText(configFilepath))
             {
                 TomlTable table = TOML.Parse(reader);
-                config.inputFilepath = table["input_filepath"].AsString;
+                config.inputFilepath = configRoot + "/" + table["input_filepath"].AsString;
                 config.inputFilepath = config.inputFilepath.Replace("\\", "/");
-                config.outputFilepath = table["output_filepath"].AsString;
+                config.outputFilepath = configRoot + "/" + table["output_filepath"].AsString;
                 config.outputFilepath = config.outputFilepath.Replace("\\", "/");
-                config.titleFilepath = table["title_filepath"].AsString;
+                config.titleFilepath = configRoot + "/" + table["title_filepath"].AsString;
                 config.titleFilepath = config.titleFilepath.Replace("\\", "/");
-                config.declarationFilepath = table["declaration_filepath"].AsString;
+                config.declarationFilepath = configRoot + "/" + table["declaration_filepath"].AsString;
                 config.declarationFilepath = config.declarationFilepath.Replace("\\", "/");
-                config.tableOfContentsFilepath = table["table_of_contents_filepath"].AsString;
+                config.tableOfContentsFilepath = configRoot + "/" + table["table_of_contents_filepath"].AsString;
                 config.tableOfContentsFilepath = config.tableOfContentsFilepath.Replace("\\", "/");
 
                 config.continousNumeration = table["continous_numeration"].AsBoolean;
